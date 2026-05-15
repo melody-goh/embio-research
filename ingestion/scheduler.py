@@ -3,7 +3,12 @@ import logging
 import time
 
 from config.relevance_profile import CLINICALTRIALS_QUERIES, PUBMED_QUERIES
-from config.settings import PUBMED_MAX_RESULTS_PER_QUERY, TRIALS_MAX_RESULTS_PER_QUERY
+from config.settings import (
+    BIORXIV_MAX_RESULTS_PER_QUERY,
+    CLINICALTRIALS_MAX_RESULTS_PER_QUERY,
+    PUBMED_MAX_RESULTS_PER_QUERY,
+)
+from ingestion.biorxiv import ingest_biorxiv
 from ingestion.clinicaltrials import ingest_trials_query
 from ingestion.pubmed import ingest_pubmed_query
 from storage.db import init_db
@@ -24,9 +29,15 @@ def run_once() -> dict[str, int]:
 
     for query in CLINICALTRIALS_QUERIES:
         try:
-            counts["trials"] += ingest_trials_query(query, max_results=TRIALS_MAX_RESULTS_PER_QUERY)
+            counts["trials"] += ingest_trials_query(query, max_results=CLINICALTRIALS_MAX_RESULTS_PER_QUERY)
         except Exception:
             LOGGER.exception("ClinicalTrials ingestion failed for query: %s", query)
+
+    try:
+        biorxiv_counts = ingest_biorxiv(max_results=BIORXIV_MAX_RESULTS_PER_QUERY)
+        counts["articles"] += biorxiv_counts["total"]
+    except Exception:
+        LOGGER.exception("bioRxiv/medRxiv ingestion failed")
 
     LOGGER.info("Ingestion complete: %s", counts)
     return counts

@@ -37,33 +37,32 @@ def score_item(source_id: str, source_type: str, title: str, body: str, item_dat
 
 
 def score_all(limit: int | None = None) -> pd.DataFrame:
-    con = get_connection()
-    rows = con.execute(
-        """
-        SELECT id, 'article' AS source_type, title, abstract AS body, pub_date AS item_date
-        FROM articles
-        UNION ALL
-        SELECT id, 'trial' AS source_type, title,
-               concat_ws(' ', conditions, interventions, sponsor, phase, status) AS body,
-               start_date AS item_date
-        FROM trials
-        """
-    ).fetchdf()
-
-    output = []
-    for _, row in rows.iterrows():
-        result = score_item(row.id, row.source_type, row.title, row.body, row.item_date)
-        con.execute(
+    with get_connection() as con:
+        rows = con.execute(
             """
-            INSERT OR REPLACE INTO embeddings (source_id, source_type, embedding, model_name)
-            VALUES (?, ?, ?, ?)
+            SELECT id, 'article' AS source_type, title, abstract AS body, pub_date AS item_date
+            FROM articles
+            UNION ALL
+            SELECT id, 'trial' AS source_type, title,
+                   concat_ws(' ', conditions, interventions, sponsor, phase, status) AS body,
+                   start_date AS item_date
+            FROM trials
             """,
-            [row.id, row.source_type, to_blob(result["embedding"]), model_name()],
-        )
-        result.pop("embedding")
-        output.append({**row.to_dict(), **result})
+        ).fetchdf()
 
-    con.close()
+        output = []
+        for _, row in rows.iterrows():
+            result = score_item(row.id, row.source_type, row.title, row.body, row.item_date)
+            con.execute(
+                """
+                INSERT OR REPLACE INTO embeddings (source_id, source_type, embedding, model_name)
+                VALUES (?, ?, ?, ?)
+                """,
+                [row.id, row.source_type, to_blob(result["embedding"]), model_name()],
+            )
+            result.pop("embedding")
+            output.append({**row.to_dict(), **result})
+
     frame = pd.DataFrame(output).sort_values("score", ascending=False) if output else pd.DataFrame()
     if limit is not None and not frame.empty:
         return frame.head(limit)

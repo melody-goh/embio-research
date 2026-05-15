@@ -15,9 +15,9 @@ summarises high-value items, and captures feedback so the signal can improve ove
 ## Quick Start
 
 ```bash
-python -m storage.db
-python -m ingestion.scheduler --once
-streamlit run dashboard/app.py
+venv/bin/python -m storage.db
+venv/bin/python -m ingestion.scheduler --once
+venv/bin/streamlit run dashboard/app.py
 ```
 
 The dashboard will be available at the local URL printed by Streamlit.
@@ -36,7 +36,8 @@ Optional settings:
 
 ```bash
 PUBMED_MAX_RESULTS_PER_QUERY=20
-TRIALS_MAX_RESULTS_PER_QUERY=20
+CLINICALTRIALS_MAX_RESULTS_PER_QUERY=20
+BIORXIV_MAX_RESULTS_PER_QUERY=25
 SUMMARY_MIN_SCORE=0.55
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 EMBEDDING_ALLOW_DOWNLOAD=1
@@ -63,13 +64,13 @@ calling across layers unnecessarily:
 
 ```bash
 # Compile/import sanity check
-python -m compileall -q config storage ingestion nlp ranking summarisation feedback dashboard
+venv/bin/python -m compileall -q config storage ingestion nlp ranking summarisation feedback dashboard
 
 # Run ingestion once
-python -m ingestion.scheduler --once
+venv/bin/python -m ingestion.scheduler --once
 
 # Launch product UI
-streamlit run dashboard/app.py
+venv/bin/streamlit run dashboard/app.py
 ```
 
 The database lives at `data/embio.db`.

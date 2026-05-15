@@ -20,16 +20,15 @@ tags: 3-5 concise topic tags.
 
 
 def get_cached_summary(source_id: str, source_type: str) -> dict | None:
-    con = get_connection()
-    row = con.execute(
-        """
-        SELECT summary_text, relevance_note, tags
-        FROM summaries
-        WHERE source_id = ? AND source_type = ?
-        """,
-        [source_id, source_type],
-    ).fetchone()
-    con.close()
+    with get_connection() as con:
+        row = con.execute(
+            """
+            SELECT summary_text, relevance_note, tags
+            FROM summaries
+            WHERE source_id = ? AND source_type = ?
+            """,
+            [source_id, source_type],
+        ).fetchone()
     if not row:
         return None
     return {"summary": row[0], "relevance_note": row[1], "tags": _parse_tags(row[2])}
@@ -50,23 +49,22 @@ def summarise(title: str, body: str, source_id: str, source_type: str, relevance
 
 
 def store_summary(source_id: str, source_type: str, summary: dict, relevance_score: float) -> None:
-    con = get_connection()
-    con.execute(
-        """
-        INSERT OR REPLACE INTO summaries
-        (source_id, source_type, summary_text, relevance_note, relevance_score, tags)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        [
-            source_id,
-            source_type,
-            summary.get("summary", ""),
-            summary.get("relevance_note", ""),
-            relevance_score,
-            json.dumps(summary.get("tags", [])),
-        ],
-    )
-    con.close()
+    with get_connection() as con:
+        con.execute(
+            """
+            INSERT OR REPLACE INTO summaries
+            (source_id, source_type, summary_text, relevance_note, relevance_score, tags)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                source_id,
+                source_type,
+                summary.get("summary", ""),
+                summary.get("relevance_note", ""),
+                relevance_score,
+                json.dumps(summary.get("tags", [])),
+            ],
+        )
 
 
 def _openai_summary(title: str, body: str) -> dict:

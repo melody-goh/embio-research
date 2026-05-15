@@ -26,23 +26,22 @@ def load_results() -> pd.DataFrame:
     if scored.empty:
         return scored
 
-    con = get_connection()
-    articles = con.execute(
-        """
-        SELECT id, 'article' AS source_type, title, abstract AS body, journal AS source_label,
-               authors, pub_date AS item_date, url, fetched_at
-        FROM articles
-        """
-    ).fetchdf()
-    trials = con.execute(
-        """
-        SELECT id, 'trial' AS source_type, title,
-               concat_ws(' ', conditions, interventions, sponsor, phase, status) AS body,
-               sponsor AS source_label, status AS authors, start_date AS item_date, url, fetched_at
-        FROM trials
-        """
-    ).fetchdf()
-    con.close()
+    with get_connection() as con:
+        articles = con.execute(
+            """
+            SELECT id, 'article' AS source_type, title, abstract AS body, journal AS source_label,
+                   authors, pub_date AS item_date, url, fetched_at
+            FROM articles
+            """
+        ).fetchdf()
+        trials = con.execute(
+            """
+            SELECT id, 'trial' AS source_type, title,
+                   concat_ws(' ', conditions, interventions, sponsor, phase, status) AS body,
+                   sponsor AS source_label, status AS authors, start_date AS item_date, url, fetched_at
+            FROM trials
+            """
+        ).fetchdf()
 
     metadata = pd.concat([articles, trials], ignore_index=True)
     results = scored.merge(metadata, on=["id", "source_type", "title", "body", "item_date"], how="left")
