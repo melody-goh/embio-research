@@ -13,6 +13,9 @@ PUBMED_QUERIES = [
     '"irreversible electroporation"[Title/Abstract] AND pancreas[Title/Abstract]',
     '"percutaneous ablation"[Title/Abstract] AND "pancreatic adenocarcinoma"[Title/Abstract]',
     '"electroporation"[Title/Abstract] AND "drug delivery"[Title/Abstract] AND tumor[Title/Abstract]',
+    '"calcium electroporation"[Title/Abstract]',
+    '"pulsed electric field"[Title/Abstract] AND cancer[Title/Abstract]',
+    '"EUS-guided"[Title/Abstract] AND ablation[Title/Abstract]',
 ]
 
 CLINICALTRIALS_QUERIES = [
@@ -37,6 +40,11 @@ PRIORITY_KEYWORDS = [
     "catheter",
     "clinical feasibility",
     "safety",
+    "pulsed electric field", "pef", "nanoknife",
+    "calcium electroporation", "eus-guided", "endoscopic ultrasound",
+    "pancreatic ductal adenocarcinoma", "pdac",
+    "locoregional therapy", "interventional oncology",
+    "first-in-human", "locally advanced pancreatic cancer",
 ]
 
 SCORING_WEIGHTS = {
