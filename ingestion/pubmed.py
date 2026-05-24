@@ -51,14 +51,19 @@ def fetch_articles(pmids: list[str]) -> list[dict]:
     return [_parse_article(node) for node in root.findall(".//PubmedArticle")]
 
 
-def ingest_pubmed_query(query: str, max_results: int = 20) -> int:
+def ingest_pubmed_query(query: str, max_results: int = 20) -> dict[str, int]:
     pmids = search_pubmed(query, max_results=max_results)
     time.sleep(0.12 if NCBI_API_KEY else 0.35)
     articles = fetch_articles(pmids)
+    new = updated = 0
     for article in articles:
-        upsert_article(article)
-    LOGGER.info("Stored %s PubMed articles for query: %s", len(articles), query)
-    return len(articles)
+        is_new = upsert_article(article)
+        if is_new:
+            new += 1
+        else:
+            updated += 1
+    LOGGER.info("Stored %s new, %s updated PubMed articles for query: %s", new, updated, query)
+    return {"new": new, "updated": updated, "total": new + updated}
 
 
 def _parse_article(node: ET.Element) -> dict:

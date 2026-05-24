@@ -19,13 +19,18 @@ def search_trials(query: str, max_results: int = 20) -> list[dict]:
     return response.json().get("studies", [])
 
 
-def ingest_trials_query(query: str, max_results: int = 20) -> int:
+def ingest_trials_query(query: str, max_results: int = 20) -> dict[str, int]:
     studies = search_trials(query, max_results=max_results)
     trials = [_parse_trial(study) for study in studies]
+    new = updated = 0
     for trial in trials:
-        upsert_trial(trial)
-    LOGGER.info("Stored %s ClinicalTrials studies for query: %s", len(trials), query)
-    return len(trials)
+        is_new = upsert_trial(trial)
+        if is_new:
+            new += 1
+        else:
+            updated += 1
+    LOGGER.info("Stored %s new, %s updated ClinicalTrials studies for query: %s", new, updated, query)
+    return {"new": new, "updated": updated, "total": new + updated}
 
 
 def _parse_trial(study: dict) -> dict:

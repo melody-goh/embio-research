@@ -1,71 +1,105 @@
-import hashlib
 import logging
-import os
 
 import numpy as np
+from sentence_transformers import SentenceTransformer
 
 from config.relevance_profile import EMBIO_REFERENCE
 from config.settings import EMBEDDING_ALLOW_DOWNLOAD, EMBEDDING_MODEL
+from storage.db import get_connection
 
 LOGGER = logging.getLogger(__name__)
-_MODEL = None
-_MODEL_FAILED = False
-_REFERENCE_EMBEDDING = None
-FALLBACK_DIMENSIONS = 384
+_MODEL: SentenceTransformer | None = None
+_REFERENCE_EMBEDDING: np.ndarray | None = None
 
 
-def embed_text(text: str) -> np.ndarray:
-    model = _load_model()
-    if model is not None:
-        return model.encode(text or "", normalize_embeddings=True)
-    return _hash_embedding(text or "")
-
-
-def reference_embedding() -> np.ndarray:
-    global _REFERENCE_EMBEDDING
-    if _REFERENCE_EMBEDDING is None:
-        _REFERENCE_EMBEDDING = embed_text(EMBIO_REFERENCE)
-    return _REFERENCE_EMBEDDING
-
-
-def model_name() -> str:
-    return EMBEDDING_MODEL if _load_model() is not None else "hashing-fallback"
-
-
-def to_blob(embedding: np.ndarray) -> bytes:
-    return np.asarray(embedding, dtype=np.float32).tobytes()
-
-
-def from_blob(blob: bytes) -> np.ndarray:
-    return np.frombuffer(blob, dtype=np.float32)
-
-
-def _load_model():
-    global _MODEL, _MODEL_FAILED
-    if _MODEL is not None or _MODEL_FAILED:
-        return _MODEL
-    try:
+def get_model() -> SentenceTransformer:
+    global _MODEL
+    if _MODEL is None:
         if not EMBEDDING_ALLOW_DOWNLOAD:
-            os.environ.setdefault("HF_HUB_OFFLINE", "1")
-            os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-        from sentence_transformers import SentenceTransformer
-
-        kwargs = {} if EMBEDDING_ALLOW_DOWNLOAD else {"local_files_only": True}
-        _MODEL = SentenceTransformer(EMBEDDING_MODEL, **kwargs)
-    except Exception as exc:
-        _MODEL_FAILED = True
-        LOGGER.warning("Using deterministic fallback embeddings: %s", exc)
+            raise RuntimeError(
+                "Embedding model not loaded and EMBEDDING_ALLOW_DOWNLOAD=0. "
+                "Set EMBEDDING_ALLOW_DOWNLOAD=1 in your .env file."
+            )
+        LOGGER.info("Loading embedding model: %s", EMBEDDING_MODEL)
+        _MODEL = SentenceTransformer(EMBEDDING_MODEL)
     return _MODEL
 
 
-def _hash_embedding(text: str) -> np.ndarray:
-    vector = np.zeros(FALLBACK_DIMENSIONS, dtype=np.float32)
-    for token in text.lower().replace("/", " ").replace("-", " ").split():
-        digest = hashlib.sha256(token.encode("utf-8")).digest()
-        index = int.from_bytes(digest[:4], "big") % FALLBACK_DIMENSIONS
-        sign = 1.0 if digest[4] % 2 == 0 else -1.0
-        vector[index] += sign
-    norm = np.linalg.norm(vector)
-    if norm == 0:
-        return vector
-    return vector / norm
+def get_reference_embedding() -> np.ndarray:
+    global _REFERENCE_EMBEDDING
+    if _REFERENCE_EMBEDDING is None:
+        _REFERENCE_EMBEDDING = get_model().encode(EMBIO_REFERENCE, normalize_embeddings=True)
+    return _REFERENCE_EMBEDDING
+
+
+def embed_text(text: str) -> np.ndarray:
+    return get_model().encode(text or "", normalize_embeddings=True)
+
+
+def embed_all_pending() -> int:
+    """
+    Embed every article and trial that has no entry in the embeddings table.
+    Returns count of newly embedded documents.
+    """
+    model = get_model()
+    embedded = 0
+
+    with get_connection() as con:
+        article_rows = con.execute(
+            """
+            SELECT a.id, a.title, a.abstract
+            FROM articles a
+            LEFT JOIN embeddings e ON e.source_id = a.id AND e.source_type = 'article'
+            WHERE e.source_id IS NULL OR e.model_name != ?
+            """,
+            [EMBEDDING_MODEL],
+        ).fetchall()
+
+    for source_id, title, abstract in article_rows:
+        text = f"{title or ''}. {abstract or ''}".strip()
+        vector = model.encode(text, normalize_embeddings=True)
+        _store_embedding(source_id, "article", vector)
+        embedded += 1
+
+    with get_connection() as con:
+        trial_rows = con.execute(
+            """
+            SELECT t.id, t.title, t.conditions, t.interventions
+            FROM trials t
+            LEFT JOIN embeddings e ON e.source_id = t.id AND e.source_type = 'trial'
+            WHERE e.source_id IS NULL OR e.model_name != ?
+            """,
+            [EMBEDDING_MODEL],
+        ).fetchall()
+
+    for source_id, title, conditions, interventions in trial_rows:
+        text = f"{title or ''}. {conditions or ''} {interventions or ''}".strip()
+        vector = model.encode(text, normalize_embeddings=True)
+        _store_embedding(source_id, "trial", vector)
+        embedded += 1
+
+    LOGGER.info("Embedded %s new documents", embedded)
+    return embedded
+
+
+def _store_embedding(source_id: str, source_type: str, vector: np.ndarray) -> None:
+    with get_connection() as con:
+        con.execute(
+            """
+            INSERT OR REPLACE INTO embeddings
+                (source_id, source_type, embedding, model_name)
+            VALUES (?, ?, ?, ?)
+            """,
+            [source_id, source_type, vector.astype(np.float32).tobytes(), EMBEDDING_MODEL],
+        )
+
+
+if __name__ == "__main__":
+    import logging
+
+    from storage.db import init_db
+
+    logging.basicConfig(level=logging.INFO)
+    init_db()
+    n = embed_all_pending()
+    print(f"Done. {n} documents embedded.")

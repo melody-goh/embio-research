@@ -11,6 +11,8 @@ import streamlit as st
 
 from config.relevance_profile import DEFAULT_MIN_RELEVANCE
 from feedback.store import record_feedback
+from ingestion.scheduler import run_once
+from nlp.embedder import embed_all_pending
 from ranking.scorer import score_all
 from storage.db import get_connection, init_db
 from summarisation.llm import get_cached_summary, summarise
@@ -29,22 +31,21 @@ def load_results() -> pd.DataFrame:
     with get_connection() as con:
         articles = con.execute(
             """
-            SELECT id, 'article' AS source_type, title, abstract AS body, journal AS source_label,
-                   authors, pub_date AS item_date, url, fetched_at
+            SELECT id, 'article' AS source_type, journal AS source_label,
+                   authors, url, fetched_at
             FROM articles
             """
         ).fetchdf()
         trials = con.execute(
             """
-            SELECT id, 'trial' AS source_type, title,
-                   concat_ws(' ', conditions, interventions, sponsor, phase, status) AS body,
-                   sponsor AS source_label, status AS authors, start_date AS item_date, url, fetched_at
+            SELECT id, 'trial' AS source_type, sponsor AS source_label,
+                   status AS authors, url, fetched_at
             FROM trials
             """
         ).fetchdf()
 
     metadata = pd.concat([articles, trials], ignore_index=True)
-    results = scored.merge(metadata, on=["id", "source_type", "title", "body", "item_date"], how="left")
+    results = scored.merge(metadata, on=["id", "source_type"], how="left")
     cached = []
     for _, row in results.iterrows():
         summary = get_cached_summary(row.id, row.source_type) or {}
@@ -63,14 +64,21 @@ def refresh_data() -> None:
     st.rerun()
 
 
+def refresh_pipeline() -> None:
+    with st.spinner("Refreshing sources and embeddings..."):
+        run_once()
+        embed_all_pending()
+    refresh_data()
+
+
 with st.sidebar:
     st.title("Embio Intelligence")
     source_filter = st.multiselect("Source", ["article", "trial"], default=["article", "trial"])
     min_score = st.slider("Minimum relevance", 0.0, 1.0, DEFAULT_MIN_RELEVANCE, 0.01)
     days_back = st.slider("Published or started within", 30, 1825, 730, 30)
     only_unsummarised = st.checkbox("Needs summary")
-    if st.button("Refresh scores", use_container_width=True):
-        refresh_data()
+    if st.button("Refresh", use_container_width=True):
+        refresh_pipeline()
 
 results = load_results()
 
@@ -78,7 +86,7 @@ st.title("Embio Intelligence")
 st.caption("Research and clinical-trial radar for electroporation, pancreatic cancer, catheter platforms, and adjacent medtech signals.")
 
 if results.empty:
-    st.info("No records yet. Run `python -m ingestion.scheduler --once` to fetch PubMed articles and clinical trials.")
+    st.info("No embedded records yet. Use Refresh to fetch sources and embed new documents.")
     st.stop()
 
 cutoff = date.today() - timedelta(days=days_back)

@@ -1,17 +1,34 @@
 import numpy as np
 
-from config.relevance_profile import PRIORITY_KEYWORDS
-from nlp.embedder import reference_embedding
+from config.relevance_profile import EMBIO_REFERENCE, PRIORITY_KEYWORDS
+from nlp.embedder import get_model
+
+_REFERENCE_EMBEDDING: np.ndarray | None = None
 
 
-def semantic_similarity(embedding: np.ndarray) -> float:
-    reference = reference_embedding()
-    if embedding.size == 0 or reference.size == 0:
-        return 0.0
-    return float(np.dot(embedding, reference))
+def get_reference_embedding() -> np.ndarray:
+    global _REFERENCE_EMBEDDING
+    if _REFERENCE_EMBEDDING is None:
+        _REFERENCE_EMBEDDING = get_model().encode(EMBIO_REFERENCE, normalize_embeddings=True)
+    return _REFERENCE_EMBEDDING
 
 
-def keyword_hits(text: str) -> tuple[int, list[str]]:
+def cosine_similarity(embedding_bytes: bytes) -> float:
+    """
+    Compute cosine similarity between a stored embedding blob and the
+    Embio reference.
+    """
+    vector = np.frombuffer(embedding_bytes, dtype=np.float32)
+    reference = get_reference_embedding()
+    return float(np.dot(vector, reference))
+
+
+def keyword_score(text: str) -> tuple[float, list[str]]:
+    """
+    Count priority keyword hits in lowercased text.
+    Returns (normalised_score 0-1, list of matched keywords).
+    """
     lowered = (text or "").lower()
     matches = [keyword for keyword in PRIORITY_KEYWORDS if keyword.lower() in lowered]
-    return len(matches), matches
+    score = min(len(matches) / 5.0, 1.0)
+    return score, matches
