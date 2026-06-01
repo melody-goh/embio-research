@@ -7,3 +7,4 @@ sentence-transformers
 scikit-learn
 numpy
 openai
+plotly>=5.18
