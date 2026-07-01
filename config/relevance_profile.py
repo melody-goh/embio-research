@@ -1,20 +1,13 @@
 """
 config/relevance_profile.py
 
-Updated with domain-expert keyword list.
-Two distinct relevance clusters identified from mentor input:
-  1. Electroporation delivery — catheter-based, intraductal, ERCP-guided
-  2. Diagnostics / biomarkers — pancreatic juice, liquid biopsy, early detection
+Embio's relevance profile. Edit EMBIO_REFERENCE and PRIORITY_KEYWORDS
+as Embio's scientific and commercial focus sharpens.
 
-Both matter to Embio. EMBIO_REFERENCE and queries reflect both.
+IMPORTANT: PRIORITY_KEYWORDS must stay in sync with KEYWORD_CLUSTERS
+in dashboard/app.py. If you add a keyword here, add it to the
+relevant cluster there too so it appears in the Relevance profile UI.
 """
-
-# ---------------------------------------------------------------------------
-# Semantic reference text
-# ---------------------------------------------------------------------------
-# This is the anchor for ALL semantic scoring. Every document is compared
-# against this vector. The more specific and accurate this is to Embio's
-# actual focus, the better the scoring separates relevant from noise.
 
 EMBIO_REFERENCE = """
 Embio Medical AB is a Swedish medtech startup developing a flexible catheter
@@ -45,39 +38,25 @@ organoid drug testing for pancreatic cancer.
 """.strip()
 
 
-# ---------------------------------------------------------------------------
-# PubMed queries
-# ---------------------------------------------------------------------------
-# Organised into three clusters matching Embio's focus areas.
-# Each query targets a distinct facet to maximise coverage without
-# excessive overlap.
-
 PUBMED_QUERIES = [
-    # --- Cluster 1: Core electroporation ---
+    # Electroporation core
     '"electroporation"[Title/Abstract] AND "pancreatic cancer"[Title/Abstract]',
     '"irreversible electroporation"[Title/Abstract] AND pancreas[Title/Abstract]',
     '"electrochemotherapy"[Title/Abstract] AND catheter[Title/Abstract]',
     '"calcium electroporation"[Title/Abstract]',
     '"pulsed electric field"[Title/Abstract] AND cancer[Title/Abstract]',
-
-    # --- Cluster 2: Intraductal / ERCP / catheter delivery ---
+    # Intraductal / ERCP
     '"intraductal"[Title/Abstract] AND "electroporation"[Title/Abstract]',
     '"ERCP"[Title/Abstract] AND ("electroporation"[Title/Abstract] OR "ablation"[Title/Abstract])',
     '"catheter-based"[Title/Abstract] AND "drug delivery"[Title/Abstract] AND pancrea*[Title/Abstract]',
     '"biliary"[Title/Abstract] AND "electroporation"[Title/Abstract]',
     '"cholangiocarcinoma"[Title/Abstract] AND ("ablation"[Title/Abstract] OR "electroporation"[Title/Abstract])',
-
-    # --- Cluster 3: Biomarkers / diagnostics ---
+    # Biomarkers
     '"pancreatic juice"[Title/Abstract] AND ("biomarker"[Title/Abstract] OR "KRAS"[Title/Abstract])',
     '"pancreatic intraepithelial neoplasia"[Title/Abstract] OR "PanIN"[Title/Abstract]',
     '"early detection"[Title/Abstract] AND "pancreatic cancer"[Title/Abstract]',
     '"liquid biopsy"[Title/Abstract] AND "pancreatic cancer"[Title/Abstract]',
 ]
-
-
-# ---------------------------------------------------------------------------
-# ClinicalTrials queries
-# ---------------------------------------------------------------------------
 
 CLINICALTRIALS_QUERIES = [
     "electroporation pancreatic cancer",
@@ -87,16 +66,21 @@ CLINICALTRIALS_QUERIES = [
     "intraductal drug delivery pancreatic",
 ]
 
+EUROPEPMC_QUERIES = [
+    'TITLE:electroporation ABSTRACT:"pancreatic cancer"',
+    'TITLE:"irreversible electroporation" ABSTRACT:pancreas',
+    'ABSTRACT:electrochemotherapy ABSTRACT:catheter',
+    'ABSTRACT:"calcium electroporation" ABSTRACT:cancer',
+    'ABSTRACT:"pulsed electric field" ABSTRACT:ablation',
+]
 
 # ---------------------------------------------------------------------------
-# Priority keywords — organised by cluster
+# PRIORITY_KEYWORDS
+# Must stay in sync with KEYWORD_CLUSTERS in dashboard/app.py.
 # ---------------------------------------------------------------------------
-# All clusters are weighted equally in scoring.
-# Grouping is for human readability and maintenance only.
 
 PRIORITY_KEYWORDS = [
-
-    # --- Electroporation core ---
+    # Electroporation core
     "electroporation",
     "irreversible electroporation",
     "reversible electroporation",
@@ -107,41 +91,21 @@ PRIORITY_KEYWORDS = [
     "non-thermal ablation",
     "low voltage electroporation",
     "electroporation parameters",
-    "electroporation electrode design",
-
-    # --- Catheter / device ---
+    "nanoknife",
+    # Catheter / intraductal
     "electroporation catheter",
     "catheter-based electroporation",
     "flexible catheter",
+    "catheter",
     "intraductal catheter",
     "bipolar electrode catheter",
     "ring electrode catheter",
     "microcatheter",
-    "endoluminal",
-
-    # --- Intraductal / ERCP ---
     "intraductal electroporation",
     "pancreatic duct electroporation",
     "ercp electroporation",
     "ercp guided ablation",
-    "intraductal ablation",
-    "pancreatic duct ablation",
-    "endoscopic ablation",
-    "endoscopic irreversible electroporation",
-    "biliary electroporation",
-    "bile duct electroporation",
-    "biliary tract ablation",
-    "biliary catheter",
-
-    # --- Drug delivery ---
-    "localized drug delivery",
-    "intratumoral drug delivery",
-    "pancreatic duct drug delivery",
-    "catheter-based drug delivery",
-    "local chemotherapy pancreatic",
-    "endoluminal drug delivery",
-
-    # --- Oncology / clinical ---
+    # Oncology / clinical
     "pancreatic cancer",
     "pancreatic ductal adenocarcinoma",
     "pdac",
@@ -156,13 +120,20 @@ PRIORITY_KEYWORDS = [
     "first-in-human",
     "interventional oncology",
     "locoregional therapy",
-
-    # --- Diagnostics / biomarkers ---
+    "endoscopic ablation",
+    "biliary electroporation",
+    # Drug delivery
+    "drug delivery",
+    "localized drug delivery",
+    "intratumoral drug delivery",
+    "pancreatic duct drug delivery",
+    "catheter-based drug delivery",
+    "endoluminal drug delivery",
+    # Biomarkers / diagnostics
     "pancreatic juice biomarker",
     "pancreatic liquid biopsy",
     "pancreatic juice",
     "pancreatic cyst fluid",
-    "pancreatic fluid biomarker",
     "kras pancreatic",
     "tp53 pancreatic",
     "circulating tumor dna",
@@ -172,20 +143,13 @@ PRIORITY_KEYWORDS = [
     "pdac early diagnosis",
     "ercp pancreatic juice",
     "pancreatic duct sampling",
-    "catheter aspiration biomarker",
-
-    # --- Adjacent / strategic ---
-    "organoid pancreatic cancer",
-    "nanoknife",
+    # Adjacent / strategic
     "eus-guided",
     "endoscopic ultrasound",
     "clinical feasibility",
+    "safety",
+    "organoid pancreatic cancer",
 ]
-
-
-# ---------------------------------------------------------------------------
-# Scoring weights — must sum to 1.0
-# ---------------------------------------------------------------------------
 
 SCORING_WEIGHTS = {
     "semantic":  0.50,

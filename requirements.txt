@@ -8,3 +8,4 @@ scikit-learn
 numpy
 openai
 plotly>=5.18
+Pillow>=10.0

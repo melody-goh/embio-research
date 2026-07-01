@@ -3,31 +3,16 @@ storage/db.py
 
 All database access for Embio Intelligence.
 
-SCHEMA OVERVIEW — designed to support a future ML relevance classifier:
-
-    articles        Raw research papers from all sources (PubMed, Europe PMC, bioRxiv)
-    trials          Clinical trials from ClinicalTrials.gov (+ ICTRP when enabled)
-    embeddings      Embedding vectors for every article and trial
-    summaries       LLM-generated summaries and relevance notes (cached — one per doc)
-    feedback        Raw user signals: thumbs up/down per document
-    ml_labels       Derived training labels for the ML classifier.
-                    Separate from feedback because labels are processed/versioned,
-                    feedback is raw. One row per (source_id, source_type, label_version).
-    ingestion_log   One row per ingestion run per source. Tracks how much data
-                    came in, from where, and when. Essential for debugging and
-                    for the dashboard's data-health panel.
-
-WHY ml_labels IS SEPARATE FROM feedback:
-    feedback holds raw signals that may be noisy (misclicks, changed opinions).
-    ml_labels holds processed, versioned labels used for training. When you
-    retrain the classifier with a better labelling strategy, you bump the version
-    and keep old labels for comparison. You cannot reconstruct versioned
-    training sets from raw feedback alone.
-
-STORAGE FORMAT FOR EMBEDDINGS:
-    numpy arrays stored as BLOB via array.tobytes().
-    Retrieve with: np.frombuffer(blob, dtype=np.float32)
-    Faster and more compact than JSON-encoding float arrays.
+Tables:
+    articles        Research papers from all sources
+    trials          Clinical trials
+    embeddings      Embedding vectors
+    summaries       LLM-generated summaries (cached)
+    feedback        Raw thumbs up/down signals
+    ml_labels       Versioned training labels for the classifier
+    ingestion_log   Per-run audit log
+    user_profile    Keyword states (active/muted/removed) and scoring weights
+                    saved from the Relevance profile page.
 """
 
 import json
@@ -41,13 +26,9 @@ from config.settings import DB_PATH
 @contextmanager
 def get_connection():
     """
-    Yields a DuckDB connection guaranteed to close on exit, even on exception.
+    Yields a DuckDB connection guaranteed to close on exit.
     DuckDB allows only one writer at a time — leaked connections cause
-    cryptic 'Could not set lock' errors.
-
-    Usage:
-        with get_connection() as con:
-            con.execute(...)
+    'Could not set lock' errors.
     """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(DB_PATH))
@@ -61,15 +42,10 @@ def init_db() -> None:
     """Create all tables, sequences, and indexes. Safe to call multiple times."""
     with get_connection() as con:
 
-        # DuckDB does not auto-increment INTEGER PRIMARY KEY like SQLite.
-        # Sequences are required for auto-incrementing integer PKs.
         con.execute("CREATE SEQUENCE IF NOT EXISTS feedback_id_seq      START 1")
         con.execute("CREATE SEQUENCE IF NOT EXISTS ingestion_log_id_seq START 1")
         con.execute("CREATE SEQUENCE IF NOT EXISTS ml_labels_id_seq     START 1")
 
-        # --- Articles ---
-        # source column: 'pubmed' | 'europepmc' | 'biorxiv' | 'medrxiv'
-        # Tracks which ingestion pipeline produced each record.
         con.execute("""
             CREATE TABLE IF NOT EXISTS articles (
                 id          VARCHAR PRIMARY KEY,
@@ -87,7 +63,6 @@ def init_db() -> None:
         con.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT 'pubmed'")
         con.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS fetched_at TIMESTAMP DEFAULT now()")
 
-        # --- Trials ---
         con.execute("""
             CREATE TABLE IF NOT EXISTS trials (
                 id              VARCHAR PRIMARY KEY,
@@ -107,7 +82,6 @@ def init_db() -> None:
         con.execute("ALTER TABLE trials ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT 'clinicaltrials'")
         con.execute("ALTER TABLE trials ADD COLUMN IF NOT EXISTS fetched_at TIMESTAMP DEFAULT now()")
 
-        # --- Embeddings ---
         con.execute("""
             CREATE TABLE IF NOT EXISTS embeddings (
                 source_id    VARCHAR,
@@ -119,7 +93,6 @@ def init_db() -> None:
             )
         """)
 
-        # --- Summaries (LLM cache) ---
         con.execute("""
             CREATE TABLE IF NOT EXISTS summaries (
                 source_id       VARCHAR,
@@ -133,7 +106,6 @@ def init_db() -> None:
             )
         """)
 
-        # --- Feedback (raw user signals) ---
         con.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id          INTEGER DEFAULT nextval('feedback_id_seq') PRIMARY KEY,
@@ -145,16 +117,6 @@ def init_db() -> None:
             )
         """)
 
-        # --- ML training labels ---
-        # Populated by running: python -m ml.prepare_labels
-        # NOT written to during normal ingestion or dashboard use.
-        #
-        # label:         1 = relevant, 0 = not relevant
-        # label_version: bump when changing labelling strategy, preserving history
-        # label_source:  'feedback_aggregate' | 'manual' | 'heuristic'
-        # confidence:    0.0-1.0. Feedback-derived labels get lower confidence
-        #                than manually verified ones. Used as sample weights
-        #                during classifier training.
         con.execute("""
             CREATE TABLE IF NOT EXISTS ml_labels (
                 id              INTEGER DEFAULT nextval('ml_labels_id_seq') PRIMARY KEY,
@@ -168,11 +130,6 @@ def init_db() -> None:
             )
         """)
 
-        # --- Ingestion audit log ---
-        # One row per (source, query, run). Answers:
-        #   "Did anything come in today?"
-        #   "Which source produces the most new content?"
-        #   "Did a query fail silently?"
         con.execute("""
             CREATE TABLE IF NOT EXISTS ingestion_log (
                 id              INTEGER DEFAULT nextval('ingestion_log_id_seq') PRIMARY KEY,
@@ -185,7 +142,23 @@ def init_db() -> None:
             )
         """)
 
-        # --- Indexes ---
+        # user_profile stores the keyword filter states and scoring weights
+        # saved from the Relevance profile page.
+        #
+        # keyword_states: JSON dict {keyword: "active"|"muted"|"removed"}
+        # scoring_weights: JSON dict {semantic, keyword, recency, feedback} floats 0-1
+        #
+        # Single row with id=1. Use save_user_profile() / load_user_profile().
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS user_profile (
+                id              INTEGER PRIMARY KEY,
+                keyword_states  TEXT DEFAULT '{}',
+                scoring_weights TEXT DEFAULT '{}',
+                updated_at      TIMESTAMP DEFAULT now()
+            )
+        """)
+
+        # Indexes
         con.execute("CREATE INDEX IF NOT EXISTS idx_articles_pub_date    ON articles(pub_date)")
         con.execute("CREATE INDEX IF NOT EXISTS idx_articles_fetched     ON articles(fetched_at)")
         con.execute("CREATE INDEX IF NOT EXISTS idx_articles_source      ON articles(source)")
@@ -200,14 +173,11 @@ def init_db() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Article helpers
+# Article / trial upserts
 # ---------------------------------------------------------------------------
 
 def upsert_article(article: dict) -> bool:
-    """
-    Insert or replace an article.
-    Returns True if new record, False if existing record was refreshed.
-    """
+    """Insert or replace an article. Returns True if new record."""
     raw = article.get("raw_json", "")
     if isinstance(raw, dict):
         raw_str = json.dumps(raw, default=str)
@@ -220,7 +190,6 @@ def upsert_article(article: dict) -> bool:
         existing = con.execute(
             "SELECT 1 FROM articles WHERE id = ?", [article["id"]]
         ).fetchone()
-
         con.execute(
             """
             INSERT OR REPLACE INTO articles
@@ -239,12 +208,11 @@ def upsert_article(article: dict) -> bool:
                 article.get("source", "pubmed"),
             ],
         )
-
     return existing is None
 
 
 def upsert_trial(trial: dict) -> bool:
-    """Insert or replace a trial. Returns True if new."""
+    """Insert or replace a trial. Returns True if new record."""
     raw = trial.get("raw_json", "")
     if isinstance(raw, dict):
         raw_str = json.dumps(raw, default=str)
@@ -257,7 +225,6 @@ def upsert_trial(trial: dict) -> bool:
         existing = con.execute(
             "SELECT 1 FROM trials WHERE id = ?", [trial["id"]]
         ).fetchone()
-
         con.execute(
             """
             INSERT OR REPLACE INTO trials
@@ -279,45 +246,75 @@ def upsert_trial(trial: dict) -> bool:
                 trial.get("source", "clinicaltrials"),
             ],
         )
-
     return existing is None
 
 
 # ---------------------------------------------------------------------------
-# Feedback helpers
+# Feedback
 # ---------------------------------------------------------------------------
 
 def store_feedback(source_id: str, source_type: str, signal: int, notes: str = "") -> None:
-    """Record a thumbs-up (+1) or thumbs-down (-1) signal."""
     with get_connection() as con:
         con.execute(
-            """
-            INSERT INTO feedback (source_id, source_type, signal, notes)
-            VALUES (?, ?, ?, ?)
-            """,
+            "INSERT INTO feedback (source_id, source_type, signal, notes) VALUES (?, ?, ?, ?)",
             [source_id, source_type, 1 if signal > 0 else -1, notes],
         )
 
 
 def feedback_weight(source_id: str, source_type: str) -> float:
-    """
-    Aggregate feedback into a weight in [-1.0, 1.0].
-    Three unanimous votes saturate the scale. No feedback returns 0.0.
-    """
     with get_connection() as con:
         rows = con.execute(
             "SELECT signal FROM feedback WHERE source_id = ? AND source_type = ?",
             [source_id, source_type],
         ).fetchall()
-
     if not rows:
         return 0.0
-    total = sum(row[0] for row in rows)
+    total = sum(r[0] for r in rows)
     return max(-1.0, min(1.0, total / 3.0))
 
 
 # ---------------------------------------------------------------------------
-# ML label helpers
+# User profile — keyword states and scoring weights
+# ---------------------------------------------------------------------------
+
+def load_user_profile() -> dict:
+    """
+    Return the saved user profile as:
+        {
+            "keyword_states":  {keyword: "active"|"muted"|"removed"},
+            "scoring_weights": {semantic, keyword, recency, feedback}
+        }
+    Returns empty dicts if no profile has been saved yet.
+    """
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT keyword_states, scoring_weights FROM user_profile WHERE id = 1"
+        ).fetchone()
+    if not row:
+        return {"keyword_states": {}, "scoring_weights": {}}
+    return {
+        "keyword_states":  json.loads(row[0] or "{}"),
+        "scoring_weights": json.loads(row[1] or "{}"),
+    }
+
+
+def save_user_profile(keyword_states: dict, scoring_weights: dict) -> None:
+    """
+    Persist the user's keyword filter states and scoring weight preferences.
+    Upserts into the single-row user_profile table (id=1).
+    """
+    with get_connection() as con:
+        con.execute(
+            """
+            INSERT OR REPLACE INTO user_profile (id, keyword_states, scoring_weights, updated_at)
+            VALUES (1, ?, ?, now())
+            """,
+            [json.dumps(keyword_states), json.dumps(scoring_weights)],
+        )
+
+
+# ---------------------------------------------------------------------------
+# ML labels
 # ---------------------------------------------------------------------------
 
 def upsert_ml_label(
@@ -328,18 +325,9 @@ def upsert_ml_label(
     label_source: str = "feedback_aggregate",
     confidence: float = 1.0,
 ) -> None:
-    """
-    Insert or replace a training label for the ML classifier.
-
-    Called by ml/prepare_labels.py — NOT called during normal ingestion.
-    Labels are derived from aggregated feedback, not written directly by users.
-    """
     with get_connection() as con:
         con.execute(
-            """
-            DELETE FROM ml_labels
-            WHERE source_id = ? AND source_type = ? AND label_version = ?
-            """,
+            "DELETE FROM ml_labels WHERE source_id = ? AND source_type = ? AND label_version = ?",
             [source_id, source_type, label_version],
         )
         con.execute(
@@ -353,29 +341,16 @@ def upsert_ml_label(
 
 
 def get_labelled_examples(label_version: int = 1) -> list[dict]:
-    """
-    Return all labelled examples for a given label version.
-    Used by ml/train.py to build the training set.
-    """
     with get_connection() as con:
         rows = con.execute(
-            """
-            SELECT source_id, source_type, label, confidence
-            FROM ml_labels
-            WHERE label_version = ?
-            ORDER BY created_at
-            """,
+            "SELECT source_id, source_type, label, confidence FROM ml_labels WHERE label_version = ? ORDER BY created_at",
             [label_version],
         ).fetchall()
-
-    return [
-        {"source_id": r[0], "source_type": r[1], "label": r[2], "confidence": r[3]}
-        for r in rows
-    ]
+    return [{"source_id": r[0], "source_type": r[1], "label": r[2], "confidence": r[3]} for r in rows]
 
 
 # ---------------------------------------------------------------------------
-# Ingestion log helpers
+# Ingestion log
 # ---------------------------------------------------------------------------
 
 def log_ingestion(
@@ -385,30 +360,22 @@ def log_ingestion(
     updated_records: int = 0,
     error: str | None = None,
 ) -> None:
-    """Record the outcome of one ingestion query run."""
     with get_connection() as con:
         con.execute(
-            """
-            INSERT INTO ingestion_log (source, query, new_records, updated_records, error)
-            VALUES (?, ?, ?, ?, ?)
-            """,
+            "INSERT INTO ingestion_log (source, query, new_records, updated_records, error) VALUES (?, ?, ?, ?, ?)",
             [source, query, new_records, updated_records, error],
         )
 
 
 def ingestion_summary(days: int = 30) -> list[dict]:
-    """
-    Per-source ingestion totals for the last N days.
-    Used in the dashboard's data-health panel.
-    """
     with get_connection() as con:
         rows = con.execute(
             """
             SELECT source,
-                   COUNT(*)               AS runs,
-                   SUM(new_records)       AS total_new,
-                   SUM(updated_records)   AS total_updated,
-                   MAX(run_at)            AS last_run
+                   COUNT(*)             AS runs,
+                   SUM(new_records)     AS total_new,
+                   SUM(updated_records) AS total_updated,
+                   MAX(run_at)          AS last_run
             FROM ingestion_log
             WHERE run_at >= now() - INTERVAL (?) DAY
               AND error IS NULL
@@ -417,13 +384,8 @@ def ingestion_summary(days: int = 30) -> list[dict]:
             """,
             [days],
         ).fetchall()
-
     return [
-        {
-            "source": r[0], "runs": r[1],
-            "total_new": r[2], "total_updated": r[3],
-            "last_run": r[4],
-        }
+        {"source": r[0], "runs": r[1], "total_new": r[2], "total_updated": r[3], "last_run": r[4]}
         for r in rows
     ]
 
