@@ -439,6 +439,15 @@ html, body, [class*="css"], [data-testid="stAppViewContainer"] {{
     color: {C_MUTED2};
     margin-bottom: 0.9rem;
 }}
+[data-testid="stVerticalBlockBorderWrapper"] {{
+    background: {C_WHITE};
+    border: 1px solid {C_BORDER};
+    border-radius: 14px;
+    box-shadow: 0 1px 4px rgba(100,100,200,0.05), 0 4px 16px rgba(100,100,200,0.05);
+}}
+[data-testid="stVerticalBlockBorderWrapper"] > div {{
+    padding: 1.15rem 1.2rem !important;
+}}
 
 /* ════════════════════════════════════
    SCORE CHIPS
@@ -1100,120 +1109,116 @@ with tab_overview:
 
     # ── Publications over time — AREA chart with gradient fill ──
     with col_l:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="card-title">Publication volume</div>', unsafe_allow_html=True)
-        st.markdown('<div class="card-sub">Monthly article count, last 3 years</div>', unsafe_allow_html=True)
-        with get_connection() as con:
-            trend = con.execute("""
-                SELECT date_trunc('month', pub_date) AS month, COUNT(*) AS count
-                FROM articles
-                WHERE pub_date IS NOT NULL
-                  AND pub_date >= now() - INTERVAL '3 years'
-                GROUP BY 1 ORDER BY 1
-            """).df()
-        if not trend.empty:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=trend["month"], y=trend["count"],
-                mode="lines",
-                line=dict(color=C_WIST, width=2.5),
-                fill="tozeroy",
-                fillcolor="rgba(156,161,255,0.12)",
-                hovertemplate="<b>%{x|%b %Y}</b><br>%{y} articles<extra></extra>",
-            ))
-            fig.update_layout(
-                **BASE_LAYOUT, height=200,
-                xaxis=dict(showgrid=False, tickfont=dict(size=10), zeroline=False),
-                yaxis=dict(gridcolor=GRID_COLOR, tickfont=dict(size=10), zeroline=False, title=""),
-            )
-            st.plotly_chart(fig, width="stretch")
-        else:
-            st.caption("No dated articles yet.")
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown('<div class="card-title">Publication volume</div>', unsafe_allow_html=True)
+            st.markdown('<div class="card-sub">Monthly article count, last 3 years</div>', unsafe_allow_html=True)
+            with get_connection() as con:
+                trend = con.execute("""
+                    SELECT date_trunc('month', pub_date) AS month, COUNT(*) AS count
+                    FROM articles
+                    WHERE pub_date IS NOT NULL
+                      AND pub_date >= now() - INTERVAL '3 years'
+                    GROUP BY 1 ORDER BY 1
+                """).df()
+            if not trend.empty:
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=trend["month"], y=trend["count"],
+                    mode="lines",
+                    line=dict(color=C_WIST, width=2.5),
+                    fill="tozeroy",
+                    fillcolor="rgba(156,161,255,0.12)",
+                    hovertemplate="<b>%{x|%b %Y}</b><br>%{y} articles<extra></extra>",
+                ))
+                fig.update_layout(
+                    **BASE_LAYOUT, height=200,
+                    xaxis=dict(showgrid=False, tickfont=dict(size=10), zeroline=False),
+                    yaxis=dict(gridcolor=GRID_COLOR, tickfont=dict(size=10), zeroline=False, title=""),
+                )
+                st.plotly_chart(fig, width="stretch")
+            else:
+                st.caption("No dated articles yet.")
 
     # ── Score distribution — gradient bars ──
     with col_r:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="card-title">Relevance score distribution</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="card-sub">All {len(results):,} records · threshold at {min_score:.2f}</div>', unsafe_allow_html=True)
-        scores = results["score"].dropna().values
-        hist_counts, bin_edges = np.histogram(scores, bins=25, range=(0, 1))
-        bin_centres = (bin_edges[:-1] + bin_edges[1:]) / 2
-        bar_colors  = [score_to_color(float(v)) for v in bin_centres]
-        fig2 = go.Figure(go.Bar(
-            x=bin_centres, y=hist_counts,
-            width=(bin_edges[1] - bin_edges[0]) * 0.82,
-            marker_color=bar_colors, marker_line_width=0,
-            hovertemplate="Score %{x:.2f}<br>%{y} records<extra></extra>",
-        ))
-        fig2.update_traces(marker_cornerradius=4)
-        fig2.add_vline(
-            x=min_score, line_dash="dot", line_color=C_SLATE, line_width=1.5,
-            annotation_text="  threshold", annotation_font_size=10,
-            annotation_font_color=C_SLATE,
-        )
-        fig2.update_layout(
-            **BASE_LAYOUT, height=200,
-            xaxis=dict(title="relevance score", showgrid=False, tickfont=dict(size=10)),
-            yaxis=dict(gridcolor=GRID_COLOR, tickfont=dict(size=10), zeroline=False),
-            bargap=0.08,
-        )
-        st.plotly_chart(fig2, width="stretch")
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown('<div class="card-title">Relevance score distribution</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="card-sub">All {len(results):,} records · threshold at {min_score:.2f}</div>', unsafe_allow_html=True)
+            scores = results["score"].dropna().values
+            hist_counts, bin_edges = np.histogram(scores, bins=25, range=(0, 1))
+            bin_centres = (bin_edges[:-1] + bin_edges[1:]) / 2
+            bar_colors  = [score_to_color(float(v)) for v in bin_centres]
+            fig2 = go.Figure(go.Bar(
+                x=bin_centres, y=hist_counts,
+                width=(bin_edges[1] - bin_edges[0]) * 0.82,
+                marker_color=bar_colors, marker_line_width=0,
+                hovertemplate="Score %{x:.2f}<br>%{y} records<extra></extra>",
+            ))
+            fig2.update_traces(marker_cornerradius=4)
+            fig2.add_vline(
+                x=min_score, line_dash="dot", line_color=C_SLATE, line_width=1.5,
+                annotation_text="  threshold", annotation_font_size=10,
+                annotation_font_color=C_SLATE,
+            )
+            fig2.update_layout(
+                **BASE_LAYOUT, height=200,
+                xaxis=dict(title="relevance score", showgrid=False, tickfont=dict(size=10)),
+                yaxis=dict(gridcolor=GRID_COLOR, tickfont=dict(size=10), zeroline=False),
+                bargap=0.08,
+            )
+            st.plotly_chart(fig2, width="stretch")
 
     col_l2, col_r2 = st.columns(2, gap="medium")
 
     # ── Top keyword frequency — coloured by cluster ──
     with col_l2:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="card-title">Top keyword matches</div>', unsafe_allow_html=True)
-        st.markdown('<div class="card-sub">Frequency across all records · coloured by research cluster</div>', unsafe_allow_html=True)
-        all_kws = [kw for kws in results["matched_keywords"].dropna() for kw in kws]
-        if all_kws:
-            top_kws = pd.DataFrame(Counter(all_kws).most_common(12), columns=["keyword","count"])
-            def kw_color(kw):
-                for cluster, ks in KEYWORD_CLUSTERS.items():
-                    if kw in ks: return CLUSTER_COLORS.get(cluster, CHART_SLATE)
-                return CHART_SLATE
-            top_kws["color"] = top_kws["keyword"].apply(kw_color)
-            fig3 = go.Figure(go.Bar(
-                x=top_kws["count"], y=top_kws["keyword"],
-                orientation="h",
-                marker_color=top_kws["color"].tolist(),
-                marker_line_width=0,
-                hovertemplate="%{y}<br>%{x} matches<extra></extra>",
-            ))
-            fig3.update_traces(marker_cornerradius=4)
-            fig3.update_layout(
-                **BASE_LAYOUT, height=330,
-                xaxis=dict(showgrid=True, gridcolor=GRID_COLOR, tickfont=dict(size=10), zeroline=False),
-                yaxis=dict(showgrid=False, tickfont=dict(size=10), autorange="reversed"),
-                bargap=0.28,
-            )
-            st.plotly_chart(fig3, width="stretch")
-        else:
-            st.caption("No keyword matches yet.")
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown('<div class="card-title">Top keyword matches</div>', unsafe_allow_html=True)
+            st.markdown('<div class="card-sub">Frequency across all records · coloured by research cluster</div>', unsafe_allow_html=True)
+            all_kws = [kw for kws in results["matched_keywords"].dropna() for kw in kws]
+            if all_kws:
+                top_kws = pd.DataFrame(Counter(all_kws).most_common(12), columns=["keyword","count"])
+                def kw_color(kw):
+                    for cluster, ks in KEYWORD_CLUSTERS.items():
+                        if kw in ks: return CLUSTER_COLORS.get(cluster, CHART_SLATE)
+                    return CHART_SLATE
+                top_kws["color"] = top_kws["keyword"].apply(kw_color)
+                fig3 = go.Figure(go.Bar(
+                    x=top_kws["count"], y=top_kws["keyword"],
+                    orientation="h",
+                    marker_color=top_kws["color"].tolist(),
+                    marker_line_width=0,
+                    hovertemplate="%{y}<br>%{x} matches<extra></extra>",
+                ))
+                fig3.update_traces(marker_cornerradius=4)
+                fig3.update_layout(
+                    **BASE_LAYOUT, height=330,
+                    xaxis=dict(showgrid=True, gridcolor=GRID_COLOR, tickfont=dict(size=10), zeroline=False),
+                    yaxis=dict(showgrid=False, tickfont=dict(size=10), autorange="reversed"),
+                    bargap=0.28,
+                )
+                st.plotly_chart(fig3, width="stretch")
+            else:
+                st.caption("No keyword matches yet.")
 
     # ── Source breakdown + ingestion log ──
     with col_r2:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="card-title">Source breakdown</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="card-sub">{len(results):,} total records across all ingestion sources</div>', unsafe_allow_html=True)
-        st.markdown(source_bars_html(results), unsafe_allow_html=True)
-        st.markdown('<hr style="margin:1rem 0">', unsafe_allow_html=True)
-        st.markdown('<div class="card-title" style="font-size:0.8rem;letter-spacing:0.04em;text-transform:uppercase;color:#9CA3AF">Ingestion log — last 30 days</div>', unsafe_allow_html=True)
-        try:
-            health = ingestion_summary(days=30)
-            if health:
-                hdf = pd.DataFrame(health)[["source","total_new","total_updated","last_run"]]
-                hdf["last_run"] = pd.to_datetime(hdf["last_run"]).dt.strftime("%d %b %H:%M")
-                st.dataframe(hdf, hide_index=True, width="stretch")
-            else:
-                st.caption("No ingestion log entries yet.")
-        except Exception:
-            st.caption("Ingestion log not available.")
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown('<div class="card-title">Source breakdown</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="card-sub">{len(results):,} total records across all ingestion sources</div>', unsafe_allow_html=True)
+            st.markdown(source_bars_html(results), unsafe_allow_html=True)
+            st.markdown('<hr style="margin:1rem 0">', unsafe_allow_html=True)
+            st.markdown('<div class="card-title" style="font-size:0.8rem;letter-spacing:0.04em;text-transform:uppercase;color:#9CA3AF">Ingestion log — last 30 days</div>', unsafe_allow_html=True)
+            try:
+                health = ingestion_summary(days=30)
+                if health:
+                    hdf = pd.DataFrame(health)[["source","total_new","total_updated","last_run"]]
+                    hdf["last_run"] = pd.to_datetime(hdf["last_run"]).dt.strftime("%d %b %H:%M")
+                    st.dataframe(hdf, hide_index=True, width="stretch")
+                else:
+                    st.caption("No ingestion log entries yet.")
+            except Exception:
+                st.caption("Ingestion log not available.")
 
     # ── Cluster activity — small multiples (articles per cluster over time) ──
     with st.expander("Research cluster activity — scoring diagnostics"):
