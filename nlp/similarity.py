@@ -1,8 +1,8 @@
 """
 nlp/similarity.py
 
-Cosine similarity against the Embio reference embedding,
-and keyword matching against a caller-supplied keyword list.
+Cosine similarity against the Embio reference embedding +
+keyword matching against a caller-supplied keyword list
 """
 
 import numpy as np
@@ -22,8 +22,8 @@ def get_reference_embedding() -> np.ndarray:
 
 def cosine_similarity(embedding_bytes: bytes) -> float:
     """
-    Cosine similarity between a stored embedding blob and the Embio reference.
-    Returns float in [0, 1] for normalised vectors. Higher = more relevant.
+    Cosine similarity between a stored embedding blob and the Embio reference
+    Returns float in [0, 1] for normalised vectors (higher = more relevant)
     """
     vector    = np.frombuffer(embedding_bytes, dtype=np.float32)
     reference = get_reference_embedding()
@@ -35,14 +35,14 @@ def keyword_score(
     keywords: list[str] | None = None,
 ) -> tuple[float, list[str]]:
     """
-    Count keyword hits in lowercased text.
+    Count keyword hits in lowercased text
 
-    Args:
+    args:
         text:     Title + abstract/body concatenated.
         keywords: List of keywords to check. Defaults to PRIORITY_KEYWORDS.
                   scorer.py passes only the active subset.
 
-    Returns:
+    returns:
         (normalised_score 0-1, list of matched keywords)
     """
     if keywords is None:

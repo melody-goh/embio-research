@@ -1,7 +1,7 @@
 """
 storage/db.py
 
-All database access for Embio Intelligence.
+All database access for Embio Intelligence
 
 Tables:
     articles        Research papers from all sources
@@ -26,8 +26,8 @@ from config.settings import DB_PATH
 @contextmanager
 def get_connection():
     """
-    Yields a DuckDB connection guaranteed to close on exit.
-    DuckDB allows only one writer at a time — leaked connections cause
+    Gives a DuckDB connection guaranteed to close on exit.
+    DuckDB allows only one writer at a time - leaked connections cause
     'Could not set lock' errors.
     """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -142,13 +142,12 @@ def init_db() -> None:
             )
         """)
 
-        # user_profile stores the keyword filter states and scoring weights
-        # saved from the Relevance profile page.
+        # user_profile stores the keyword filter states and scoring weights saved from the Relevance profile page
         #
         # keyword_states: JSON dict {keyword: "active"|"muted"|"removed"}
         # scoring_weights: JSON dict {semantic, keyword, recency, feedback} floats 0-1
         #
-        # Single row with id=1. Use save_user_profile() / load_user_profile().
+        # Single row with id=1. Use save_user_profile() / load_user_profile()
         con.execute("""
             CREATE TABLE IF NOT EXISTS user_profile (
                 id              INTEGER PRIMARY KEY,

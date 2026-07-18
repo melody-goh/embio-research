@@ -1,14 +1,5 @@
 """
-dashboard/app.py — Embio Intelligence
-Professional analytical dashboard.
-
-Design language:
-  - Hero banner: periwinkle→wisteria gradient, contains title + key metrics
-  - Content: white cards on #F4F5FF page background
-  - Typography: Inter, tight letter-spacing, clear hierarchy
-  - Charts: area (trend), gradient bars (score dist), horizontal bars (keywords)
-  - Evidence feed: clean card anatomy, gradient accent on priority items
-  - Colour palette: #C5CAFB / #9CA1FF / #396070 / #FFFFFF
+  Colour palette: #C5CAFB / #9CA1FF / #396070 / #FFFFFF
 """
 
 import base64

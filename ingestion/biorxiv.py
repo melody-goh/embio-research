@@ -1,22 +1,22 @@
 """
 ingestion/biorxiv.py
 
-bioRxiv and medRxiv preprint ingestion via the official bioRxiv REST API.
+bioRxiv and medRxiv preprint ingestion via the official bioRxiv REST API
 
 WHY PREPRINTS MATTER FOR EMBIO:
     In fast-moving fields like electroporation oncology, preprints appear
     6-18 months before peer-reviewed publication. A competitor filing a patent
-    or running a trial often publishes a preprint first. This source gives
-    Embio early-warning signal that PubMed cannot.
+    or running a trial often publishes a preprint first
+    -> this source gives Embio early-warning signal that PubMed cannot
 
     medRxiv specifically covers clinical medicine — exactly where
     electroporation trials will first appear in the literature.
 
 API reference: https://api.biorxiv.org/
-- No API key required.
-- Rate limit: not formally published; 1 req/s is safe and respectful.
-- Two servers: biorxiv.org (life sciences) and medrxiv.org (clinical medicine).
-  We query both. medRxiv is higher priority for Embio.
+- No API key required
+- Rate limit: not formally published; 1 req/s is safe and respectful
+- 2 servers: biorxiv.org (life sciences) and medrxiv.org (clinical medicine)
+  both r queried, but medRxiv is higher priority for Embio.
 
 ID FORMAT:
     Preprints don't have PMIDs. We use "biorxiv_{doi_suffix}" as the ID,
@@ -41,13 +41,13 @@ _RATE_SLEEP = 1.0  # conservative — API has no published limit
 # ---------------------------------------------------------------------------
 # Search terms mapped to server
 # ---------------------------------------------------------------------------
-# bioRxiv API does not support keyword search — it only supports date-range
-# fetches. We fetch recent content and filter by keyword locally.
-# This is intentional API design on their part; it's not a missing feature.
+# bioRxiv API does not support keyword search 
+#  — it only supports date-range fetches
+#  -> fetch recent content and filter by keyword locally
+# This is intentional API design on their part, not a missing feature
 #
-# Strategy: fetch the last N days from medRxiv (clinical) and bioRxiv (bio),
-# then keep only records whose title or abstract contains at least one of our
-# keywords. This is efficient because we only do it for recent content.
+# Strategy: fetch the last N days from medRxiv (clinical) and bioRxiv (bio), then keep only records whose title or abstract contains at least one of our keywords
+# -> efficient because we only do it for recent content.
 
 BIORXIV_FILTER_KEYWORDS = [
     "electroporation",
@@ -84,8 +84,8 @@ def fetch_recent(
     start_date = end_date - timedelta(days=days_back)
     interval   = f"{start_date.isoformat()}/{end_date.isoformat()}"
 
-    # The API paginates in batches of 100 (their max per call).
-    # We fetch pages until we have enough keyword-matching results or run out.
+    # API paginates in batches of 100 (their max per call)
+    # -> fetch pages until we have enough keyword-matching results or run out
     results = []
     offset  = 0
     page_size = 100
@@ -168,7 +168,7 @@ def _parse_preprint(item: dict, server: str) -> dict:
     doi_suffix = doi.replace("10.1101/", "").strip("/")
     record_id  = f"biorxiv_{doi_suffix}" if doi_suffix else ""
 
-    # Use the latest version's date if available
+    # Use latest version's date if available
     pub_date = item.get("date") or item.get("date_revised") or None
 
     return {

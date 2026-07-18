@@ -1,4 +1,4 @@
-"""PDF report generation for dashboard exports."""
+"""PDF report generation for dashboard exports"""
 
 import textwrap
 import zlib
@@ -62,7 +62,7 @@ def _pdf_wrapped_lines(text: str, width: int = 94) -> list[str]:
 
 
 def build_weekly_pdf(results_df: pd.DataFrame, generated_on: date | None = None) -> bytes:
-    """Build a concise supervisor-facing weekly insights PDF."""
+    """to build a concise supervisor-facing weekly insights PDF"""
     generated_on = generated_on or date.today()
     week_start = generated_on - timedelta(days=7)
 

@@ -38,8 +38,8 @@ def embed_text(text: str) -> np.ndarray:
 
 def embed_all_pending() -> int:
     """
-    Embed every article and trial that has no entry in the embeddings table.
-    Returns count of newly embedded documents.
+    Embed every article and trial that has no entry in the embeddings table
+    Returns count of newly embedded documents
     """
     model = get_model()
     embedded = 0

@@ -1,7 +1,7 @@
 """
 ranking/scorer.py
 
-Composite relevance scoring.
+Composite relevance scoring
 
 Respects the user's keyword profile saved in user_profile:
   active  — keyword contributes to keyword_score as normal
@@ -26,9 +26,9 @@ _RECENCY_DECAY_DAYS = 730
 
 def score_all() -> pd.DataFrame:
     """
-    Score every document that has an embedding.
+    Score every document that has an embedding
 
-    Returns a DataFrame with columns:
+    returns a DataFrame with columns:
         id, source_type, title, body, item_date, score,
         semantic_score, keyword_score, recency_score, matched_keywords
     """
