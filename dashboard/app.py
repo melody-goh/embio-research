@@ -12,8 +12,11 @@ Design language:
 """
 
 import base64
+import fcntl
 import sys
+import tempfile
 from collections import Counter
+from contextlib import contextmanager
 from datetime import date, timedelta
 from html import escape
 from pathlib import Path
@@ -23,6 +26,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 LOGO_PATH = PROJECT_ROOT / "dashboard" / "assets" / "embio-black-logo.png"
 ICON_PATH = PROJECT_ROOT / "dashboard" / "assets" / "embio-black-icon.png"
+REFRESH_LOCK_PATH = Path(tempfile.gettempdir()) / "embio-intelligence-refresh.lock"
 
 import numpy as np
 import pandas as pd
@@ -140,7 +144,6 @@ GRID_COLOR = "#EAECF8"
 CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap');
 
 *, *::before, *::after {{ box-sizing: border-box; }}
 
@@ -948,9 +951,28 @@ def load_results() -> pd.DataFrame:
 def refresh_data():
     load_results.clear(); st.rerun()
 
+@contextmanager
+def refresh_lock():
+    REFRESH_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with REFRESH_LOCK_PATH.open("w") as lock_file:
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+
 def refresh_pipeline():
-    with st.spinner("Fetching sources and embedding…"):
-        run_once(); embed_all_pending()
+    with refresh_lock() as acquired:
+        if not acquired:
+            st.warning("Refresh is already running. Please wait for it to finish before starting another one.")
+            return
+        with st.spinner("Fetching sources and embedding…"):
+            run_once()
+            embed_all_pending()
     refresh_data()
 
 
